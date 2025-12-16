@@ -1,11 +1,73 @@
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+
 import numpy
 import matplotlib.pyplot as plt
+from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
+from datetime import datetime
 from NN_numpy import *
 from snake import *
+
+DEBUG_MODE = False
 
 # Historique pour le graphique
 history_best = []
 history_avg = []
+history_longueur = []
+
+def eval_worker(args):
+    nn_data, gameParams = args
+    N = gameParams["nbGames"]
+    H = gameParams["height"]
+    W = gameParams["width"]
+
+    total = 0.0
+    max_longueur = 0
+
+    nn = NeuralNet(nn_data['arch'])
+    for idx, layer_data in enumerate(nn_data['layers']):
+        if idx > 0:
+            nn.layers[idx].weights = layer_data['weights']
+            nn.layers[idx].bias = layer_data['bias']
+
+    for _ in range(N):
+        # init partie
+        game = Game(H, W)
+
+        while game.enCours:
+            features = game.getFeatures()
+
+            prediction = nn.compute(features)
+
+            direction = numpy.argmax(prediction)
+            game.direction = direction
+
+            game.refresh()
+
+        # calcul du score
+        longueur = game.score  # taille du serpent
+        if longueur > max_longueur:
+            max_longueur = longueur
+        pas = game.steps
+        # pénalité pour les pas : récompense la rapidité
+        total += 1000 * (longueur - 4) - pas
+
+    # score final
+    score = total / (N * H * W * 1000)
+
+    return (score, max_longueur)
+
+
+def individu_to_data(individu, arch):
+    layers_data = []
+    for layer in individu.nn.layers:
+        layers_data.append({
+            'weights': layer.weights.copy() if hasattr(layer, 'weights') else None,
+            'bias': layer.bias.copy() if hasattr(layer, 'bias') else None
+        })
+    return {'arch': arch, 'layers': layers_data}
+
 
 def eval(sol, gameParams):
     N = gameParams["nbGames"]
@@ -34,7 +96,8 @@ def eval(sol, gameParams):
         if longueur > max_longueur:
             max_longueur = longueur
         pas = game.steps
-        total += 1000 * (longueur - 4) + pas
+        # pénalité pour les pas : récompense la rapidité
+        total += 1000 * (longueur - 4) - pas
 
     # score final
     sol.score = total / (N * H * W * 1000)
@@ -104,6 +167,10 @@ def optimize(taillePopulation, tailleSelection, pc, mr, arch, gameParams, nbIter
     P = taillePopulation
     S = tailleSelection
 
+    # nb workers
+    num_workers = multiprocessing.cpu_count()
+    print(f"Nb workers: {num_workers}")
+
     # pop initiale
     population = []
     for i in range(P):
@@ -111,54 +178,76 @@ def optimize(taillePopulation, tailleSelection, pc, mr, arch, gameParams, nbIter
         individu = Individu(nn, i)
         population.append(individu)
 
-    for individu in population:
-        eval(individu, gameParams)
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
 
-    # boucle principale
-    for iteration in range(nbIterations):
+        tasks = [(individu_to_data(ind, arch), gameParams) for ind in population]
+        results = list(executor.map(eval_worker, tasks, chunksize=20))
+        for ind, (score, longueur) in zip(population, results):
+            ind.score = score
+            ind.longueur = longueur
 
-        population.sort(key=lambda ind: ind.score, reverse=True)
-        population = population[:S]  # garde les meilleures
+        # boucle principale
+        for iteration in range(nbIterations):
 
-        # calcul stats
-        best_score = population[0].score
-        avg_score = sum(ind.score for ind in population) / len(population)
-        history_best.append(best_score)
-        history_avg.append(avg_score)
+            population.sort(key=lambda ind: ind.score, reverse=True)
+            population = population[:S]  # garde les meilleures
 
-        best_longueur = population[0].longueur
-        max_longueur = max(ind.longueur for ind in population)
-        print(f"Iteration {iteration + 1}/{nbIterations} - Best: {best_score:.4f} - Avg: {avg_score:.4f} - Longueur (best): {best_longueur} - Longueur (max): {max_longueur}")
+            # calcul stats
+            best_score = population[0].score
+            avg_score = sum(ind.score for ind in population) / len(population)
+            history_best.append(best_score)
+            history_avg.append(avg_score)
 
-        if on_iteration_callback is not None:
-            on_iteration_callback(iteration + 1, population[0].nn)
+            best_longueur = population[0].longueur
+            history_longueur.append(best_longueur)
+            avg_longueur = sum(history_longueur) / len(history_longueur)
 
-        # création nouveaux individu
-        nouveaux = []
-        while len(nouveaux) < P - S:
-            # selection 2 parents
-            parent1 = population[numpy.random.randint(0, S)]
-            parent2 = population[numpy.random.randint(0, S)]
+            # affiche le timestamp en debug
+            if DEBUG_MODE:
+                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                print(f"[{timestamp}] Iteration {iteration + 1}/{nbIterations} - Best: {best_score:.4f} - Avg: {avg_score:.4f} - Longueur (best): {best_longueur} - Longueur (avg): {avg_longueur:.1f}")
+            else:
+                print(f"Iteration {iteration + 1}/{nbIterations} - Best: {best_score:.4f} - Avg: {avg_score:.4f} - Longueur (best): {best_longueur} - Longueur (avg): {avg_longueur:.1f}")
 
-            # creation 2 enfants
-            enfant1 = Individu(NeuralNet(arch), len(population) + len(nouveaux))
-            enfant2 = Individu(NeuralNet(arch), len(population) + len(nouveaux) + 1)
+            if on_iteration_callback is not None:
+                on_iteration_callback(iteration + 1, population[0].nn)
 
-            # croisement
-            croisement(parent1, parent2, enfant1, enfant2, pc)
+            # création nouveaux individu
+            nouveaux = []
+            while len(nouveaux) < P - S:
+                # selection 2 parents
+                parent1 = population[numpy.random.randint(0, S)]
+                parent2 = population[numpy.random.randint(0, S)]
 
-            # mutation
-            mutation(enfant1, mr)
-            mutation(enfant2, mr)
+                # creation 2 enfants
+                enfant1 = Individu(NeuralNet(arch), len(population) + len(nouveaux))
+                enfant2 = Individu(NeuralNet(arch), len(population) + len(nouveaux) + 1)
 
-            eval(enfant1, gameParams)
-            eval(enfant2, gameParams)
+                # croisement
+                croisement(parent1, parent2, enfant1, enfant2, pc)
 
-            nouveaux.append(enfant1)
-            if len(nouveaux) < P - S:
-                nouveaux.append(enfant2)
+                # mutation
+                mutation(enfant1, mr)
+                mutation(enfant2, mr)
 
-        population.extend(nouveaux)
+                nouveaux.append(enfant1)
+                if len(nouveaux) < P - S:
+                    nouveaux.append(enfant2)
+
+            # injection d'aléatoires
+            nb_random = 10  # 10 nouveaux individus totalement aléatoires
+            for i in range(nb_random):
+                random_ind = Individu(NeuralNet(arch), len(population) + len(nouveaux) + i)
+                nouveaux.append(random_ind)
+
+            # évaluation des nouveaux individus
+            tasks = [(individu_to_data(ind, arch), gameParams) for ind in nouveaux]
+            results = list(executor.map(eval_worker, tasks, chunksize=20))
+            for ind, (score, longueur) in zip(nouveaux, results):
+                ind.score = score
+                ind.longueur = longueur
+
+            population.extend(nouveaux)
 
     # return le meilleur
     population.sort(key=lambda ind: ind.score, reverse=True)
@@ -169,13 +258,30 @@ def optimize(taillePopulation, tailleSelection, pc, mr, arch, gameParams, nbIter
 
 
 def save_plot():
-    plt.figure(figsize=(12, 6))
+    import os
+    os.makedirs("graphiques", exist_ok=True)
+
     iterations = range(1, len(history_best) + 1)
+
+    # graphique scores
+    plt.figure(figsize=(12, 6))
     plt.plot(iterations, history_best, label='best score', color='blue')
     plt.plot(iterations, history_avg, label='avg score', color='orange')
     plt.xlabel('iteration')
     plt.ylabel('score')
+    plt.title('évolution des scores')
     plt.legend()
     plt.grid(True)
-    plt.savefig('scores_evolution.png', dpi=150)
+    plt.savefig('graphiques/scores_evolution.png', dpi=150)
+    plt.close()
+
+    # graphique longueurs
+    plt.figure(figsize=(12, 6))
+    plt.plot(iterations, history_longueur, label='longueur best', color='green')
+    plt.xlabel('iteration')
+    plt.ylabel('longueur')
+    plt.title('évolution de la longueur')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('graphiques/longueur_evolution.png', dpi=150)
     plt.close()

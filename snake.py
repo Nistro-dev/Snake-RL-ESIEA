@@ -3,8 +3,8 @@ import itertools
 import numpy
 from NN_numpy import *
 
-#Ne pas toucher, cela permet de définir les tailles de couches des réseaux de neurones
-nbFeatures = 8
+# tailles de couches des réseaux de neurones
+nbFeatures = 12
 nbActions = 4
 
 class Game:
@@ -12,7 +12,7 @@ class Game:
         self.grille = [[0]*hauteur  for _ in range(largeur)] #la grille sous forme numérique : 0, 1 et 2 respectivement vide, serpent et fruit
         self.hauteur, self.largeur = hauteur, largeur #les dimensions de la grille
         self.serpent = [[largeur//2-i-1, hauteur//2] for i in range(4)] #la liste des coordonnées du serpent dans la grille
-        for (x,y) in self.serpent: self.grille[x][y] = 1 
+        for (x,y) in self.serpent: self.grille[x][y] = 1
         self.direction = 3 #la direction actuelle du serpent :  0, 1, 2, 3 resp. haut, bas, gauche et droite
         self.accessibles = [[x,y] for (x,y) in list(itertools.product(range(largeur), range(hauteur))) if [x,y] not in self.serpent] #la liste des positions accessibles
         self.fruit = [0,0] #la position du fruit
@@ -20,7 +20,8 @@ class Game:
         self.enCours = True #Flag permettant de savoir si la partie est finie ou non
         self.steps = 0 #le nombre de pas effectués depuis avoir mangé
         self.score = 4 #le score actuel, défini par la taille du serpent
-    
+        self.death_reason = None # raison de la mort (DEBUG)
+
     def setFruit(self):
         if (len(self.accessibles)==0): return False #la grille est pleine, la partie est finie
         self.fruit = self.accessibles[random.randint(0, len(self.accessibles)-1)][:] #on choisit une position accessible au hasard
@@ -37,6 +38,12 @@ class Game:
 
         if nextStep not in self.accessibles: #si la nouvelle case n'est pas accessible, c'est fini
             self.enCours = False
+            # Déterminer si c'est une collision mur ou serpent
+            x, y = nextStep
+            if x < 0 or x >= self.largeur or y < 0 or y >= self.hauteur:
+                self.death_reason = "collision_mur"
+            else:
+                self.death_reason = "collision_serpent"
             return
         self.accessibles.remove(nextStep) #on enlève la position de la nouvelle case des positions accessibles
         if self.grille[nextStep[0]][nextStep[1]]==2: #si on mange la pomme
@@ -44,11 +51,15 @@ class Game:
             self.score+=1
             if not self.setFruit(): #s'il n'est pas possible de placer un nouveau fruit, c'est fini
                 self.enCours = False
+                self.death_reason = "victoire"
                 return
         else:
             self.steps+=1 #comme on n'a pas mangé, on incrémente le nombre de pas
-            if self.steps>self.hauteur*self.largeur: #si le nombre de pas est trop grand, c'est que l'on cycle sans manger, donc on arrête
+            # limite dynamique : base + bonus par segment du serpent
+            limit = (self.hauteur * self.largeur // 2) + (len(self.serpent) * 5)
+            if self.steps > limit: #si le nombre de pas est trop grand, c'est que l'on cycle sans manger, donc on arrête
                 self.enCours = False
+                self.death_reason = f"limite_pas ({self.steps}/{limit})"
                 return
             self.grille[self.serpent[-1][0]][self.serpent[-1][1]] = 0 #on enlève la dernière case du serpent
             self.accessibles.append(self.serpent[-1][:])
@@ -58,45 +69,54 @@ class Game:
         self.serpent = [nextStep]+self.serpent
 
     def getFeatures(self):
-        features = numpy.zeros(8)
+        head_x, head_y = self.serpent[0]
 
-        tete_x, tete_y = self.serpent[0]
+        directions = [
+            (0, -1),   # haut
+            (0, 1),    # bas
+            (-1, 0),   # gauche
+            (1, 0),    # droite
+            (-1, -1),  # diag haut-gauche
+            (1, -1),   # diag haut-droite
+            (-1, 1),   # diag bas-gauche
+            (1, 1)     # diag bas-droite
+        ]
 
-        if tete_y == 0 or [tete_x, tete_y - 1] not in self.accessibles:
-            features[0] = 1
+        vision_outputs = []
 
-        if tete_y == self.hauteur - 1 or [tete_x, tete_y + 1] not in self.accessibles:
-            features[1] = 1
+        for dx, dy in directions:
+            distance = 0
+            x, y = head_x, head_y
+            found_obstacle = False
 
-        if tete_x == 0 or [tete_x - 1, tete_y] not in self.accessibles:
-            features[2] = 1
+            x += dx
+            y += dy
+            distance += 1
 
-        if tete_x == self.largeur - 1 or [tete_x + 1, tete_y] not in self.accessibles:
-            features[3] = 1
+            while not found_obstacle:
+                # mur
+                if x < 0 or x >= self.largeur or y < 0 or y >= self.hauteur:
+                    found_obstacle = True
+                # corps du serpent
+                elif [x, y] in self.serpent:
+                    found_obstacle = True
+                else:
+                    x += dx
+                    y += dy
+                    distance += 1
 
-        if self.fruit[1] < tete_y:
-            features[4] = 1
-        elif self.fruit[1] > tete_y:
-            features[4] = -1
+            vision_outputs.append(1.0 / distance)
 
-        if self.fruit[0] > tete_x:
-            features[5] = 1
-        elif self.fruit[0] < tete_x:
-            features[5] = -1
+        # 4 entrées pour la position de la pomme
+        apple_x, apple_y = self.fruit
+        pomme_inputs = [
+            1.0 if apple_x < head_x else 0.0,  # Pomme à gauche
+            1.0 if apple_x > head_x else 0.0,  # Pomme à droite
+            1.0 if apple_y < head_y else 0.0,  # Pomme en haut
+            1.0 if apple_y > head_y else 0.0   # Pomme en Bas
+        ]
 
-        features[6] = self.direction
-
-        match self.direction:
-            case 0:
-                features[7] = tete_y
-            case 1:
-                features[7] = self.hauteur - 1 - tete_y
-            case 2:
-                features[7] = tete_x
-            case 3:
-                features[7] = self.largeur - 1 - tete_x
-
-        return features
+        return numpy.array(vision_outputs + pomme_inputs)
 
     def print(self):
         print("".join(["="]*(self.largeur+2)))
