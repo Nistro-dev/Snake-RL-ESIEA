@@ -13,6 +13,7 @@ def eval(sol, gameParams):
     W = gameParams["width"]
 
     total = 0.0
+    max_longueur = 0
 
     for _ in range(N):
         # init partie
@@ -29,12 +30,15 @@ def eval(sol, gameParams):
             game.refresh()
 
         # calcul du score
-        pommes = game.score - 4  # score - 4 (taille du serpents)
+        longueur = game.score  # taille du serpent
+        if longueur > max_longueur:
+            max_longueur = longueur
         pas = game.steps
-        total += 1000 * pommes + pas
+        total += 1000 * (longueur - 4) + pas
 
     # score final
     sol.score = total / (N * H * W * 1000)
+    sol.longueur = max_longueur  # longueur max atteinte
 
     return (sol.id, sol.score)
 
@@ -43,6 +47,7 @@ class Individu:
         self.nn = nn
         self.id = id
         self.score = 0
+        self.longueur = 0
 
     def clone(self, copie):
         for idx, layer in enumerate(copie.nn.layers[1:]):
@@ -121,7 +126,9 @@ def optimize(taillePopulation, tailleSelection, pc, mr, arch, gameParams, nbIter
         history_best.append(best_score)
         history_avg.append(avg_score)
 
-        print(f"Iteration {iteration + 1}/{nbIterations} - Best: {best_score:.4f} - Avg: {avg_score:.4f}")
+        best_longueur = population[0].longueur
+        max_longueur = max(ind.longueur for ind in population)
+        print(f"Iteration {iteration + 1}/{nbIterations} - Best: {best_score:.4f} - Avg: {avg_score:.4f} - Longueur (best): {best_longueur} - Longueur (max): {max_longueur}")
 
         if on_iteration_callback is not None:
             on_iteration_callback(iteration + 1, population[0].nn)
@@ -155,7 +162,6 @@ def optimize(taillePopulation, tailleSelection, pc, mr, arch, gameParams, nbIter
 
     # return le meilleur
     population.sort(key=lambda ind: ind.score, reverse=True)
-    print(f"Best score: {population[0].score:.4f}")
 
     save_plot()
 
