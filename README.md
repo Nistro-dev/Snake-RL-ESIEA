@@ -135,14 +135,14 @@ nbIterations=1000        # Nombre de générations
 
 ## Versions
 
-### Branche `v1` (cette branche)
+### Branche [`v1`](https://github.com/Nistro-dev/Snake-RL-ESIEA/tree/v1) (cette branche)
 
 Version conforme aux consignes du projet :
 - 8 features (obstacles adjacents + direction + distance mur)
 - Évaluation séquentielle (sans multiprocessing)
 - Architecture réseau : 8 → 24 → 4
 
-### Branche `main`
+### Branche [`main`](https://github.com/Nistro-dev/Snake-RL-ESIEA/tree/main)
 
 Version améliorée avec :
 - 12 features (vision à 8 directions + position pomme)
