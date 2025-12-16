@@ -34,10 +34,11 @@ if __name__ == '__main__':
     gameParams = {"nbGames": 10, "height": 10, "width": 10}
 
     os.makedirs("gifs", exist_ok=True)
+    os.makedirs("models", exist_ok=True)
 
     def on_iteration(iteration, best_nn):
         if iteration in GIF_ITERATIONS:
-            best_nn.save(f"model_iter_{iteration}.txt")
+            best_nn.save(f"models/model_iter_{iteration}.txt")
             record_gif(best_nn, gameParams, f"gifs/snake_iter_{iteration}.gif")
 
     nn = genetic.optimize(
@@ -50,7 +51,7 @@ if __name__ == '__main__':
         nbIterations=1000,
         on_iteration_callback=on_iteration
     )
-    nn.save("model.txt")
+    nn.save("models/model.txt")
 
     record_gif(nn, gameParams, "gifs/snake_final.gif")
 

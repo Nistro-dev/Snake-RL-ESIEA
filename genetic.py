@@ -6,6 +6,7 @@ from snake import *
 # Historique pour le graphique
 history_best = []
 history_avg = []
+history_longueur = []
 
 def eval(sol, gameParams):
     N = gameParams["nbGames"]
@@ -13,6 +14,7 @@ def eval(sol, gameParams):
     W = gameParams["width"]
 
     total = 0.0
+    max_longueur = 0
 
     for _ in range(N):
         # init partie
@@ -29,12 +31,15 @@ def eval(sol, gameParams):
             game.refresh()
 
         # calcul du score
-        pommes = game.score - 4  # score - 4 (taille du serpents)
+        longueur = game.score  # taille du serpent
+        if longueur > max_longueur:
+            max_longueur = longueur
         pas = game.steps
-        total += 1000 * pommes + pas
+        total += 1000 * (longueur - 4) + pas
 
     # score final
     sol.score = total / (N * H * W * 1000)
+    sol.longueur = max_longueur  # longueur max atteinte
 
     return (sol.id, sol.score)
 
@@ -43,6 +48,7 @@ class Individu:
         self.nn = nn
         self.id = id
         self.score = 0
+        self.longueur = 0
 
     def clone(self, copie):
         for idx, layer in enumerate(copie.nn.layers[1:]):
@@ -121,7 +127,11 @@ def optimize(taillePopulation, tailleSelection, pc, mr, arch, gameParams, nbIter
         history_best.append(best_score)
         history_avg.append(avg_score)
 
-        print(f"Iteration {iteration + 1}/{nbIterations} - Best: {best_score:.4f} - Avg: {avg_score:.4f}")
+        best_longueur = population[0].longueur
+        history_longueur.append(best_longueur)
+        avg_longueur = sum(history_longueur) / len(history_longueur)
+
+        print(f"Iteration {iteration + 1}/{nbIterations} - Best: {best_score:.4f} - Avg: {avg_score:.4f} - Longueur (best): {best_longueur} - Longueur (avg): {avg_longueur:.1f}")
 
         if on_iteration_callback is not None:
             on_iteration_callback(iteration + 1, population[0].nn)
@@ -163,13 +173,30 @@ def optimize(taillePopulation, tailleSelection, pc, mr, arch, gameParams, nbIter
 
 
 def save_plot():
-    plt.figure(figsize=(12, 6))
+    import os
+    os.makedirs("graphiques", exist_ok=True)
+
     iterations = range(1, len(history_best) + 1)
+
+    # graphique scores
+    plt.figure(figsize=(12, 6))
     plt.plot(iterations, history_best, label='best score', color='blue')
     plt.plot(iterations, history_avg, label='avg score', color='orange')
     plt.xlabel('iteration')
     plt.ylabel('score')
+    plt.title('évolution des scores')
     plt.legend()
     plt.grid(True)
-    plt.savefig('scores_evolution.png', dpi=150)
+    plt.savefig('graphiques/scores_evolution.png', dpi=150)
+    plt.close()
+
+    # graphique longueurs
+    plt.figure(figsize=(12, 6))
+    plt.plot(iterations, history_longueur, label='longueur best', color='green')
+    plt.xlabel('iteration')
+    plt.ylabel('longueur')
+    plt.title('évolution de la longueur')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('graphiques/longueur_evolution.png', dpi=150)
     plt.close()
