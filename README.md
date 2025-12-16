@@ -142,12 +142,15 @@ Version conforme aux consignes du projet :
 - Évaluation séquentielle (sans multiprocessing)
 - Architecture réseau : 8 → 24 → 4
 
-### Branche [`main`](https://github.com/Nistro-dev/Snake-RL-ESIEA/tree/main)
+### Branche [`main`](https://github.com/Nistro-dev/Snake-RL-ESIEA/tree/main) (expérimentale)
 
-Version améliorée avec :
+Version expérimentale avec différentes améliorations testées. **Les résultats ne sont pas concluants** : la convergence est plus lente et les performances finales ne sont pas significativement meilleures que la version v1.
+
+Modifications testées :
 - 12 features (vision à 8 directions + position pomme)
 - Multiprocessing pour l'évaluation parallèle
-- Architecture réseau : 12 → 32 → 4
+- Architecture réseau profonde : 12 → 64 → 64 → 32 → 4
+- Croisement hybride (alpha-blending + pair/impair)
 
 ## Modèles entraînés
 
