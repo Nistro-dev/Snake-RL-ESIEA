@@ -13,13 +13,13 @@ GIF_ITERATIONS = [100, 250, 400, 600, 750, 1000]
 # Itérations pour lesquelles on veut le debug
 DEBUG_ITERATIONS = [100, 200, 300, 400, 500, 600, 700, 800, 900]
 
-def record_gif(nn, gameParams, filename, max_frames=200):
+def record_gif(nn, gameParams, filename, target_duration=30):
     vue = SnakeVue(gameParams["height"], gameParams["width"], 64)
 
     frames = []
     game = Game(gameParams["height"], gameParams["width"])
 
-    while game.enCours and len(frames) < max_frames:
+    while game.enCours:
         pred = np.argmax(nn.compute(game.getFeatures()))
         game.direction = pred
         game.refresh()
@@ -31,7 +31,8 @@ def record_gif(nn, gameParams, filename, max_frames=200):
         frames.append(frame)
 
     if frames:
-        imageio.mimsave(filename, frames, fps=10)
+        fps = max(20, min(60, len(frames) / target_duration))
+        imageio.mimsave(filename, frames, fps=fps)
 
     return game.score, game.death_reason
 
