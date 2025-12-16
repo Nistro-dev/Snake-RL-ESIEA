@@ -124,6 +124,35 @@ def croisement(parent1, parent2, enfant1, enfant2, pc):
         parent2.clone(enfant2)
         return
 
+    # 50% chance d'utiliser le croisement pair/impair
+    if numpy.random.random() < 0.5:
+        croisement_pair_impair(parent1, parent2, enfant1, enfant2)
+    else:
+        croisement_alpha(parent1, parent2, enfant1, enfant2)
+
+
+def croisement_pair_impair(parent1, parent2, enfant1, enfant2):
+    for idx in range(1, len(parent1.nn.layers)):
+        layer_p1 = parent1.nn.layers[idx]
+        layer_p2 = parent2.nn.layers[idx]
+        layer_e1 = enfant1.nn.layers[idx]
+        layer_e2 = enfant2.nn.layers[idx]
+
+        if idx % 2 == 0:  # couche paire
+            # enfant1 prend parent1, enfant2 prend parent2
+            layer_e1.weights = layer_p1.weights.copy()
+            layer_e1.bias = layer_p1.bias.copy()
+            layer_e2.weights = layer_p2.weights.copy()
+            layer_e2.bias = layer_p2.bias.copy()
+        else:  # couche impaire
+            # enfant1 prend parent2, enfant2 prend parent1
+            layer_e1.weights = layer_p2.weights.copy()
+            layer_e1.bias = layer_p2.bias.copy()
+            layer_e2.weights = layer_p1.weights.copy()
+            layer_e2.bias = layer_p1.bias.copy()
+
+
+def croisement_alpha(parent1, parent2, enfant1, enfant2):
     for idx in range(1, len(parent1.nn.layers)):
         # alpha entre 0 et 1
         alpha = numpy.random.random()

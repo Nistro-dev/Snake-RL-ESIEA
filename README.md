@@ -83,8 +83,10 @@ Cette approche permet au serpent d'**anticiper les obstacles** et d'éviter de s
 ### Architecture du réseau
 
 ```
-Entrée (12 neurones) → Couche cachée (32 neurones) → Sortie (4 neurones)
+Entrée (12 neurones) → Couche cachée (64) → Couche cachée (64) → Couche cachée (32) → Sortie (4 neurones)
 ```
+
+Le réseau profond avec 3 couches cachées permet au serpent de développer des stratégies complexes et d'éviter de se piéger lui-même.
 
 Les 4 sorties correspondent aux 4 directions possibles (haut, bas, gauche, droite).
 
@@ -183,7 +185,8 @@ nbIterations=1000        # Nombre de générations
 Version améliorée avec :
 - 12 features (vision à 8 directions + position pomme)
 - Multiprocessing pour l'évaluation parallèle
-- Architecture réseau : 12 → 32 → 4
+- Architecture réseau profonde : 12 → 64 → 64 → 32 → 4
+- Croisement hybride (alpha-blending + pair/impair)
 
 ### Branche [`v1`](https://github.com/Nistro-dev/Snake-RL-ESIEA/tree/v1)
 
